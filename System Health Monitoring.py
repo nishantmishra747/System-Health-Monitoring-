@@ -1,47 +1,33 @@
-import psutil
-import logging
+#!/bin/bash
 
-logging.basicConfig(filename='system_health.log', level=logging.INFO, 
-                    format='%(asctime)s %(levelname)s: %(message)s')
+# Set the maximum threshold for CPU and memory usage
+MAX_THRESHOLD=80
 
-CPU_THRESHOLD = 80.0
-MEMORY_THRESHOLD = 80.0
-DISK_THRESHOLD = 80.0
-PROCESS_THRESHOLD = 300
+while true; do
+    # Get CPU usage
+    cpu_usage=$(top -bn1 | grep "Cpu(s)" | \
+                sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | \
+                awk '{print 100 - $1}')
+    
+    # Get memory usage
+    mem_total=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+    mem_free=$(grep MemFree /proc/meminfo | awk '{print $2}')
+    mem_usage=$(awk "BEGIN {print ($mem_total - $mem_free) / $mem_total * 100}")
 
-def check_cpu():
-    cpu_usage = psutil.cpu_percent(interval=1)
-    if cpu_usage > CPU_THRESHOLD:
-        logging.warning(f'High CPU usage detected: {cpu_usage}%')
-    return cpu_usage
+    # Print CPU and memory usage
+    echo "CPU Usage: $cpu_usage%"
+    echo "Memory Usage: $mem_usage%"
 
-def check_memory():
-    memory = psutil.virtual_memory()
-    memory_usage = memory.percent
-    if memory_usage > MEMORY_THRESHOLD:
-        logging.warning(f'High Memory usage detected: {memory_usage}%')
-    return memory_usage
+    # Check if CPU usage exceeds the threshold
+    if (( $(echo "$cpu_usage > $MAX_THRESHOLD" | bc -l) )); then
+        echo "Warning: CPU usage exceeds $MAX_THRESHOLD%!"
+    fi
 
-def check_disk():
-    disk = psutil.disk_usage('/')
-    disk_usage = disk.percent
-    if disk_usage > DISK_THRESHOLD:
-        logging.warning(f'High Disk usage detected: {disk_usage}%')
-    return disk_usage
+    # Check if memory usage exceeds the threshold
+    if (( $(echo "$mem_usage > $MAX_THRESHOLD" | bc -l) )); then
+        echo "Warning: Memory usage exceeds $MAX_THRESHOLD%!"
+    fi
 
-def check_processes():
-    process_count = len(psutil.pids())
-    if process_count > PROCESS_THRESHOLD:
-        logging.warning(f'High number of processes running: {process_count}')
-    return process_count
-
-def monitor_system():
-    cpu = check_cpu()
-    memory = check_memory()
-    disk = check_disk()
-    processes = check_processes()
-
-    logging.info(f'System Health - CPU: {cpu}%, Memory: {memory}%, Disk: {disk}%, Processes: {processes}')
-
-if __name__ == "__main__":
-    monitor_system()
+    # Sleep for 1 second
+    sleep 1
+done
